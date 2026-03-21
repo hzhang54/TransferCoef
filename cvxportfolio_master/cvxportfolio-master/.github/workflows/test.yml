@@ -1,0 +1,227 @@
+name: Lint, Test, Packaging
+
+on:
+
+  push:
+    branches:
+      - master
+    tags:
+      - '*'
+
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  pylint:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+            # we're not yet using 3.12 because there are some issues
+            # with pylint there (November 2023)
+            python-version: '3.11'
+
+      - name: Pylint
+        run: |
+              python -m pip install pylint
+              python -m pip install . # to install dependencies
+              pylint cvxportfolio
+
+  test-packaging:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+            python-version: '3.13'
+
+      - name: Package
+        run: |
+              python -m pip install build
+              python -m build
+
+      - name: Install wheel and extra solver
+        run: |
+              python -m pip install dist/*.whl ecos
+
+      - name: Delete the repo
+        run: |
+              rm -rf *
+
+      - name: Run tests shipped with the package
+        run: |
+              python -m cvxportfolio.tests --ignore-download-errors
+
+      - name: Check that data folder wasn't accidentally created
+        run: |
+              if [ -d ~/cvxportfolio_data ]; then exit 1; fi
+
+  coveralls:
+    # only step in which we don't ignore download error; only here
+    # we run tests through coverage, because if we did ignore download errors
+    # coverage could drop to as low as 90% since some lines after exception is
+    # thrown could not be executed; however we continue on error; nothing is
+    # uploaded to coveralls unless tests, including all data download, complete
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+            python-version: '3.13'
+
+      - name: Install
+        run: |
+              python -m pip install -e .[test]
+
+      - name: Run tests with coverage, including possible download errors
+        continue-on-error: true
+        run: |
+              coverage run -m cvxportfolio.tests
+              coverage lcov
+
+      - name: Send coverage to Coveralls
+        if: ${{ github.event_name == 'push'}}
+        continue-on-error: true
+        uses: coverallsapp/github-action@v2
+        with:
+          path-to-lcov: coverage.lcov
+
+  test:
+
+    runs-on: ${{ matrix.os }}
+    # continue-on-error: ${{ matrix.python-version == '3.13' }}
+
+    strategy:
+      fail-fast: false
+      matrix: # https://github.com/actions/runner-images
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '>=3.13.0 <=3.13.13 || >=3.13.5 <3.14.0'] # bug in 3.13.4 affecting Windows: github.com/python/cpython/issues/135151
+        exclude:
+          - os: macos-latest # aarch64
+            python-version: '3.8'
+          - os: macos-latest # aarch64
+            python-version: '3.9'
+
+    env:
+      # some old source distributions of OSQP installed below (for old
+      # version testing) have syntax mistakes in their CMakeLists.txt so we
+      # patch it here
+      CMAKE_POLICY_VERSION_MINIMUM: 3.5
+
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+            python-version: ${{ matrix.python-version }}
+
+      # rationale: we test against an environment with current packages as of:
+      # ~ Q4 2023 for python 3.11
+      # ~ Q4 2022 for python 3.10
+      # ~ Q4 2021 for python 3.9
+      # for Python 3.8 it is more problematic with more incompatibilities, it
+      # is nearing its EOL so we simply test against an old Pandas
+      # we only install the base packages here,
+      # then pip below figures out the others
+
+      - name: If running on python 3.8 install some old dependencies
+        if: ${{ matrix.python-version == '3.8'}}
+        run: python -m pip install pandas==1.4.0
+
+      - name: If running on python 3.9 install some old dependencies
+        if: ${{ matrix.python-version == '3.9'}}
+        run: python -m pip install numpy==1.21.5 scipy==1.7.3 matplotlib==3.5.0 cvxpy==1.1.17 pandas==1.4.0 osqp==0.6.2.post0 ecos==2.0.11 scs==3.0.0 pillow==11.2.1
+
+      - name: If running on python 3.10 install some old dependencies
+        if: ${{ matrix.python-version == '3.10'}}
+        run: python -m pip install numpy==1.23.4 scipy==1.9.3 matplotlib==3.6.0 cvxpy==1.2.3 pandas==1.5.0 osqp==0.6.2.post9 ecos==2.0.12 pillow==11.2.1
+
+      - name: If running on python 3.11 install some old dependencies
+        if: ${{ matrix.python-version == '3.11'}}
+        run: python -m pip install numpy==1.26.1 scipy==1.11.3 matplotlib==3.7.2 cvxpy==1.4.1 pandas==2.1.2 osqp==0.6.3 ecos==2.0.12 scs==3.2.3 pillow==11.2.1
+
+      - name: If running on python 3.12 install some old dependencies
+        if: ${{ matrix.python-version == '3.12'}}
+        run: python -m pip install numpy==2.1.2 scipy==1.14.1 matplotlib==3.9.2 cvxpy==1.5.3 pandas==2.2.3 osqp==0.6.7.post3 ecos==2.0.14 scs==3.2.7 pillow==11.2.1
+
+      - name: If running on python 3.13 install any dependency whose latest version is causing upstream issues
+        if: ${{ matrix.python-version == '>=3.13.0 <=3.13.13 || >=3.13.5 <3.14.0'}}
+        run: python -m pip install pillow==11.2.1 # 11.3 throws a deprecationwarning from matplotlib; works fine, https://github.com/matplotlib/matplotlib/pull/30221
+        
+      - name: Install package
+        run: |
+              python -m pip install .[test]
+
+      - name: Run tests
+        run: |
+              python -m cvxportfolio.tests --ignore-download-errors
+
+  package:
+
+    runs-on: ubuntu-latest
+    needs: [pylint, test-packaging, test]
+
+    # following are for pypa action
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+
+      - uses: actions/checkout@v4
+        with: # all the fetch-depth are needed for setuptools-scm to make right name
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+            python-version: '3.13'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build package
+        run: |
+          python -m build
+  
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist-and-wheel
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

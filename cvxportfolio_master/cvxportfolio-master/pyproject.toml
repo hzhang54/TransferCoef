@@ -1,0 +1,117 @@
+[project]
+name = "cvxportfolio"
+dynamic = ["version"]
+description = "Portfolio optimization and back-testing."
+readme = "README.rst"
+license = {text = "GPLv3"}
+# soon required syntax will be:
+# license = "GPL-3.0-or-later"
+# seems it breaks py3.8 build as of early 2025
+authors = [{name = "Enzo Busseti"}, {name = "Stephen Boyd"},
+    {name = "Steven Diamond"}, {name = "BlackRock Inc."}]
+maintainers = [{name = "Enzo Busseti", email = "enzo.busseti@gmail.com"}]
+
+# Note on dependencies (lack of) pinning. We are testing in Github CI against
+# various combinations of dependency versions, back to versions that were
+# current in ~2021. Most probably older ones work too, if they install.
+# If we aren't able to test some old dependency it's in most cases because we
+# aren't able to install them from wheel or source, since that code tends to
+# break more easily over time, especially across different platforms. Important
+# dependencies are only Pandas and Cvxpy, and we're not using any particularly
+# new feature nor any part of their APIs that is not very well documented. Of
+# course if you try very old versions, like before 1.0, things may break. We
+# recommend to users to either install Cvxportfolio in a fresh environment,
+# with recent versions of the dependencies, or, if they install in a
+# pre-existing environment, to run `python -m cvxportfolio.tests` to check that
+# their versions of dependencies work correctly. Please do report bugs coming
+# from some combination of dependency versions that break Cvxportfolio code.
+
+dependencies = [
+    "pandas", "numpy", "matplotlib",
+    "cvxpy<1.7", # temporary to make CI tests pass; https://github.com/bodono/scs-python/pull/140
+    "curl_cffi; python_version>='3.9'",
+    "requests; python_version<'3.9'",
+    # "multiprocess", # robustifies usage w/ 3rd party modules, used if installed
+    "scs", # it's hardcoded as fallback solver if numerical errors
+    ]
+
+[project.optional-dependencies]
+docs = ["sphinx", "pydata_sphinx_theme", "sphinx-github-style", "setuptools-scm"]
+dev = ["build", "twine", "diff_cover", "pylint", "isort", "setuptools-scm",
+    "autopep8", "docformatter", "beautifulsoup4", "rstcheck"]
+examples = ['beautifulsoup4', 'lxml', 'clarabel', 'ecos']
+test = ['ecos', 'coverage[toml]']
+
+[project.urls]
+Homepage = "https://www.cvxportfolio.com"
+Repository = "https://github.com/cvxgrp/cvxportfolio"
+
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["cvxportfolio", "cvxportfolio.data", "cvxportfolio.constraints",
+    "cvxportfolio.tests"]
+
+[tool.setuptools_scm]
+# should be OK to leave this empty
+
+[tool.setuptools.package-data]
+"cvxportfolio.tests" = ["*.csv"]
+"cvxportfolio.data" = ["user_agents.json"]
+
+[tool.pylint.main]
+fail-under = 9.75
+jobs = 0 # multiprocessing pylint
+max-line-length = 79 # PEP8 default
+load-plugins =["pylint.extensions.docparams", "pylint.extensions.docstyle"]
+
+[tool.pylint.basic]
+# These variable names are defined in the paper.
+good-names = ["t", "u", "v", "w", "h", "z", "F", "d", "Sigma"]
+disable = [
+    'fixme', # We are using TODOs in code comments
+    'too-many-positional-arguments' # added in pylint 3.3, unclear use
+    ]
+
+[tool.pylint.variables]
+# These are sometimes ignored, we might instead use dataclasses for
+# sharing data between elements of a policy's DAG
+ignored-argument-names = "args|kwargs"
+
+[tool.pylint.parameter_documentation]
+# we require docstrings of public methods to document everything
+accept-no-param-doc = false
+accept-no-raise-doc = false
+accept-no-return-doc = false
+accept-no-yields-doc = false
+
+[tool.pylint.'MESSAGE CONTROL'] # check updates for the spelling of this
+enable=["useless-suppression"] # flag useless pylint pragmas
+
+[tool.coverage.report]
+fail_under = 99
+
+[tool.coverage.run]
+omit = ["*/site-packages/*", "*/dist-packages/*"]
+
+[tool.diff_cover]
+# this will be superflous once we push coverage to 100
+compare_branch = "origin/master"
+fail_under = 99
+
+[tool.diff_quality]
+# this will be superflous once we push pylint score to 10
+compare_branch = "origin/master"
+fail_under = 99
+
+[tool.autopep8]
+# these have been selected by hand, whitespaces and empty lines
+select = ["W291","W292","W293","W391","E231","E225","E303"]
+
+[tool.docformatter]
+# tweaked to remove whitespaces and other simple fixes 
+wrap-summaries = 0
+wrap-descriptions = 0
+tab-width = 4
