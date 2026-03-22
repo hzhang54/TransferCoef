@@ -17,6 +17,8 @@ class TrialDiagnostics:
 
     scenario_name: str
     ex_post_ic: float
+    alpha_over_ic_dispersion: float
+    realized_return_over_sigma_dispersion: float
     transfer_coefficient: float
     risk_weighted_transfer_coefficient: float
     active_return: float
@@ -29,6 +31,8 @@ class TrialDiagnostics:
             {
                 "scenario_name": self.scenario_name,
                 "ex_post_ic": self.ex_post_ic,
+                "alpha_over_ic_dispersion": self.alpha_over_ic_dispersion,
+                "realized_return_over_sigma_dispersion": self.realized_return_over_sigma_dispersion,
                 "transfer_coefficient": self.transfer_coefficient,
                 "risk_weighted_transfer_coefficient": self.risk_weighted_transfer_coefficient,
                 "active_return": self.active_return,
@@ -41,6 +45,37 @@ def compute_ex_post_ic(forecast_alpha: pd.Series, realized_return: pd.Series) ->
     """Compute the ex-post information coefficient."""
 
     return safe_correlation(forecast_alpha, realized_return)
+
+def compute_alpha_over_ic_dispersion(
+    forecast_alpha: pd.Series,
+    information_coefficient: float,
+) -> float:
+    """Compute ``std(alpha_i / IC)`` for the simulated cross-section."""
+    if np.isnan(information_coefficient) or np.isclose(information_coefficient, 0.0):
+        return float("nan")
+    
+    return float((forecast_alpha.astype(float) / information_coefficient).std(ddof=0))
+
+def compute_realized_return_over_sigma_dispersion(
+    realized_returns: pd.Series,
+    residual_volatilities: pd.Series,
+) -> float:
+    """Compute ``std(r_i / sigma_i)`` for the simulated cross-section."""
+    
+    aligned = pd.concat([realized_returns, residual_volatilities], axis=1).dropna()
+    if aligned.empty:
+        return float("nan")
+    
+    returns = aligned.iloc[:, 0].to_numpy(dtype=float)
+    sigmas = aligned.iloc[:, 1].to_numpy(dtype=float)
+    
+    if np.any(np.isclose(sigmas, 0.0)):
+        return float("nan")
+    
+    standardized_returns = returns / sigmas
+    return float(np.std(standardized_returns, ddof=0))
+        
+    
 
 def compute_active_return(weights: pd.Series, realized_return: pd.Series) -> float:
     """Compute active return as the portfolio return from the weight vector."""
@@ -85,7 +120,8 @@ def compute_theoretical_information_ratio(
 def build_trial_diagnostics(
     scenario_name: str,
     forecast_alpha: pd.Series,
-    realized_return: pd.Series,
+    realized_returns: pd.Series,
+    residual_volatilities: pd.Series,
     unconstrained_weights: pd.Series,
     constrained_weights: pd.Series,
     covariance: pd.DataFrame,
@@ -95,6 +131,16 @@ def build_trial_diagnostics(
     """Compute all single-trial diagnostics for one scenario."""
 
     ex_post_ic = compute_ex_post_ic(forecast_alpha, realized_return)
+    alpha_over_ic_dispersion = compute_alpha_over_ic_dispersion(
+        forecast_alpha,
+        ex_post_ic,
+    )
+    
+    realized_return_over_sigma_dispersion = compute_realized_return_over_sigma_dispersion(
+        realized_returns,
+        residual_volatilities,
+    )
+
     tc_result = build_transfer_coefficient_result(
         unconstrained_weights=unconstrained_weights,
         constrained_weights=constrained_weights,
@@ -113,6 +159,8 @@ def build_trial_diagnostics(
     return TrialDiagnostics(
         scenario_name=scenario_name,
         ex_post_ic=ex_post_ic,
+        alpha_over_ic_dispersion=alpha_over_ic_dispersion,
+        realized_return_over_sigma_dispersion=realized_return_over_sigma_dispersion,
         transfer_coefficient=tc_result.plain_tc,
         risk_weighted_transfer_coefficient=tc_result.risk_weighted_tc,
         active_return=active_return,
@@ -149,6 +197,10 @@ def build_table2_layout(summary_frame: pd.DataFrame) -> pd.DataFrame:
     row_mapping = {
         "Mean ex post IC": "ex_post_ic_mean",
         "Std ex post IC": "ex_post_ic_std",
+        "Mean std(alpha_i / IC)": "alpha_over_ic_dispersion_mean",
+        "Std std(alpha_i / IC)": "alpha_over_ic_dispersion_std",
+        "Mean std(r_i / sigma_i)": "realized_return_over_sigma_dispersion_mean",
+        "Std std(r_i / sigma_i)": "realized_return_over_sigma_dispersion_std",
         "Mean TC": "transfer_coefficient_mean",
         "Std TC": "transfer_coefficient_std",
         "Mean risk-weighted TC": "risk_weighted_transfer_coefficient_mean",
