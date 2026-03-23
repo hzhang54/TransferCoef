@@ -182,8 +182,8 @@ If the exact row names or scenario structure in the paper differ after later val
 Each simulation trial will follow this structure:
 
 1. define cross-sectional universe and model parameters,
-2. generate latent true alphas,
-3. generate forecast alphas with a target IC structure,
+2. generate standardized cross-sectional scores and residual volatilities,
+3. generate forecast residual returns with a target IC structure,
 4. generate residual risk / covariance inputs,
 5. solve an unconstrained optimization problem,
 6. solve one or more constrained optimization problems,
@@ -194,49 +194,79 @@ Each simulation trial will follow this structure:
 
 ---
 
-### 5.2 Proposed statistical model
+### 5.2 Current implemented statistical model
 
-#### Step A: Generate true latent alpha
+The current implementation has been refactored to follow the paper-style Eq. (9) scaling for the **cash benchmark special case**.
+#### Step A: Generate standardized scores
 
 For each trial and asset $i$:
 
 $$
-\alpha_i \sim \mathcal{N}(0, \sigma_{\alpha}^2)
+S_i \sim \mathcal{N}(0, 1)
 $$
 
-This represents the latent signal component in realized returns.
+where $S_i$ is the standardized cross-sectional score used in Eq. (9).
 
 
-#### Step B: Generate forecast alphas with target IC
+#### Step B: Specify residual volatilities
 
-We need a forecast vector that has a controlled correlation with true alpha.  A standard construction is:
+For the current synthetic base case, each asset is assigned a residual volatility:
 
 $$
-\hat{\alpha}_i = \rho \alpha_i + \sqrt{1 - \rho^2} \epsilon_i
+\sigma_i = \sigma_{res}
+$$
+
+for all assets in the homogeneous-volatility case.  The code now treats $\sigma_i$ explicityly, so heterogeneous residual volatilities can be introduced later without changing the architecture.
+
+#### Step C: Generate forecast residual returns
+
+The current code constructs forecast residual returns as:
+
+$$
+\alpha_i = IC \cdot \sigma_i \cdot S_i
+$$
+
+which implies:
+
+$$
+std\left(\frac{\alpha_i} {IC}\right) = std(\sigma_i S_i)
+$$
+
+and for homogeneous $\sigma_i$ with $std(S_i) \approx 1$
+
+$$
+std\left(\frac{\alpha_i}{IC}\right) \approx \sigma_i
+$$
+
+#### Step D: Generate realized residual returns
+
+The current code constructes realized residual returns as:
+$$
+r_i = \sigma_i \left( IC \cdot S_i + \sqrt{1-IC^2} \cdot Z_i \right)
 $$
 
 where:
 
-- $\rho$ is the target IC
-- $\epsilon_i \sim \mathcal{N}(0, \sigma_{\alpha}^2)$ independent noise.
+- $Z_i \sim \mathcal{N}(0, 1)$,
+- $S_i$ and $Z_i$ are independent.
 
-This gives a controllable forecast quality.
-
-#### Step C: Generate realized returns
-
-Realized return for asset $i$:
+Under this construction:
 
 $$
-r_i = \alpha_i + \eta_i
+Corr(\alpha_i, r_i) = IC
 $$
 
-where $\eta_i$ is idiosyncratic noise sampled from a covariance structure.
+in expectation, which is aligned with the paper's definition of IC as the expected correlation between forecast residual returns and realized residual returns.
 
-This covariance may be:
+#### Step E: Residual covariance used by the current implementation
 
-- diagonal only (simpler base case), or
-- factor + residual structure (advanced option), or
-- historically calibrated from Yahoo Finance data.
+The currently implemented covariance passed to the optimizer is:
+
+$$
+D = \operatorname{diag}(\sigma_1^2, \dots, \sigma_N^2)
+$$
+
+This is the residual covariance matrix only.
 
 ---
 
@@ -259,6 +289,223 @@ subject to baseline feasibility conditions such as:
 - optional leverage normalization.
 
 This portfolio serves as the reference portfolio for TC.
+
+---
+
+### 5.4 Current model limitation: cash benchmark special case only
+
+The current implementation matches the paper only under a **restricted special case**:
+
+1. the benchmark is cash,
+2. benchmark non-cash weights are zero,
+3. asset benchmark betas are zero,
+4. benchmark variance is zero,
+5. total covariance reduces to residual covariance only.
+
+Under this restricted interpretation:
+
+$$
+w_i^b = 0
+$$
+
+so active weights are:
+
+$$
+\Delta w_i = w_i - w_i^b = w_i
+$$
+
+Also, with zero benchmark variance and zero benchmark beta exposure:
+
+$$
+\Sigma = D = \operatorname{diag}(\sigma_1^2, \dots, \sigma_N^2).
+$$
+
+This is exactly the covariance structure currently passed to the optimizer.
+
+Therefore, the current implementation is structurally consistent with the paper **only for this degenerate all-cash benchmark case**.
+
+It does **not** yet implement the full Appendix A model where cross-asset covariance comes through benchmark betas.
+
+#### Long-only interpretation under a cash benchmark
+
+When the benchmark is cash, benchmark non-cash weights are zero:
+
+$$
+w_i^b = 0
+$$
+
+Therefore benchmark-relative active weights are reduced to portfolio weights themselves:
+
+$$
+\Delta w_i = w_i - w_i^b = w_i
+$$
+
+under a long-only constraint, this implies:
+
+$$
+w_i \ge 0 \quad \Longrightarrow \quad \Delta w_i \ge 0
+$$
+
+So in the current implementation, long-only means the optimizer cannot produce negative active weights at all.  This is materially different setting from the long-only benchmark-relative problem analyzed in the paper.
+
+#### Why the current implementation cannot study the paper's small-cap bias
+
+The paper's discussion of small-cap bias depends on a **non-cash benchmark with heterogeneous benchmark weights**.  The mechanism is benchmark-relative:
+
+- small-cap names tend to have low benchmark weights $w_i^b$,
+- a long-only manager cannot take sufficiently negative active positions in those names,
+- because the lower bound is:
+
+$$
+\Delta w_i \ge -w_i^b.
+$$
+
+when $w_i^b$ is small, the optimizer has very limited ability to underweight or short that asset relative to the benchmark.  This asymmetry distorts the transfer of alpha into implementable positions and creates the benchmark-induced bias described in the paper.
+
+That mechanism is absent in the current implementation because:
+
+1. the benchmark is case,
+2. all non-cash benchmark weights are zero,
+3. long-only implies $\Delta w_i = w_i \ge 0$,
+4. there is no benchmark cross-section with low-weight small-cap names.
+
+As a result, the current code can study:
+
+- long-only degradation relative to a cash benchmark,
+- transfer loss from prohibiting negative positions,
+- residual-risk-only constrained optimization,
+
+but it **cannot** be used to analyze the specific small-cap bias channel emphasized in the paper.
+
+To study that effect, the implementation would need explicit benchmark weights $w^b$ and active-weight constraints of the form:
+
+$$
+\Delta w_i = w_i - w_i^b
+$$
+
+with long-only portfolio feasibility imposed on $w_i$, not directly on $\Delta w_i$.
+
+---
+
+### 5.5 Requirements for the general Appendix A model
+
+To implement the general model described in the paper, the codebase must be extended to include explicit benchmark structure.
+
+#### Additional model inputs required
+
+The following inputs are required in addition to the current residual-volatility inuts:
+
+1. **Benchmark portfolio weights**  
+
+$$
+w^b = (w_1^b, \dots, w_N^b)^T
+$$
+
+2. **Asset beta vector relative to the benchmark**
+
+$$
+\beta = (\beta_1, \dots, \beta_N)^T
+$$
+
+3. **Benchmark return variance**
+
+$$
+\sigma_B^2 = Var(r_B)
+$$
+
+4. **Residual covariance diagonal**
+
+$$
+D = \operatorname{diag}(\sigma_1^2, \dots, \sigma_N^2)
+$$
+
+#### Total covariance required by the general model
+
+Under the paper's Appendix A assumption that cross-asset covariance occurs only through benchmark exposure, total covariance is:
+
+$$
+\Sigma = \Sigma_B^2 \beta \beta^T + D
+$$
+
+where:
+
+- $\Sigma_B^2 \beta \beta^T$ is the common covariance induced by the benchmark,
+- $D$ is the diagonal residual covariance.
+
+Equivalently, element-wise:
+
+$$ 
+\Sigma_{ij} = \beta_i \beta_j \sigma_B^2 \quad (i \neq j),
+$$
+and
+
+$$ 
+\Sigma_{ii} = \beta_i^2 \sigma_B^2 + \sigma_i^2 .
+$$
+
+#### Active-weight definition required by the general model
+
+The optimizer should work with benchmark-relative active weights:
+
+$$
+\Delta w = w - w^b
+$$
+
+not raw portfolio weights alone.
+
+This affects:
+
+- the unconstrained reference portfolio,
+- the constrained optimized portfolio,
+- active return,
+- active risk,
+- TC and IR diagnostics.
+
+#### Objective and risk expressions for the general model
+
+The benchmark-relative active optimization problem should be expressed using:
+
+$$
+max_w \; \alpha^T (w - w^b) - \frac{\lambda}{2} (w - w^b)^T \Sigma (w - w^b)
+$$
+
+or equivalently in terms of $\Delta w$ directly:
+
+$$
+max_{\Delta w} \; \alpha^T \Delta w - \frac{\lambda}{2} \Delta w^T \Sigma \Delta w
+$$
+
+The associated active return and active risk are:
+
+$$
+AR = \Delta w^T r
+$$
+
+and
+
+$$
+\sigma_A = \sqrt{\Delta w^T \Sigma \Delta w}
+$$
+
+#### Implementation work required to support the general model
+
+To move from the current cash-benchmark special case to the general paper model, the codebase must add:
+
+- benchmark weight input support in configuration,
+- asset beta vector input support,
+- benchmark variance input support,
+- total covariance builder
+
+$$
+\Sigma = \sigma_B^2 \beta \beta^T + D
+$$
+- active weight calculation
+
+$$
+\Delta w = w - w^b
+$$
+
+- diagnostics based on active weights rather than raw non-cash weights.
 
 #### Constrained portfolio
 
@@ -562,8 +809,10 @@ Syntehtic alpha generation.
 
 Responsibilities:
 
-- generate latent alpha,
-- generate forecast alpha with target IC,
+- generate standardized score vectors $S_i$,
+- generate forecast residual returns with target IC,
+- generate realized residual returns with target IC,
+- generate residual volatility vectors $\sigma_i$,
 - optionally generate factor-driven alphas,
 - validate realized signal quality.
 
@@ -746,7 +995,8 @@ The implementation must include multiple layers of validation.
 ### 10.1 mathematical sanity checks
 
 - If constrained portfolio equals unconstrained portfolio, TC should be ~1.
-- If forecast alpha is independent of true alpha, ex post IC should average near 0.
+- If forecast residual returns are generated with target $IC=0$, ex post IC should average near 0.
+- If forecast alpha is generated as $\alpha_i = IC \cdot \sigma_i \cdot S_i$, then $std (\alpha_i / IC)$ should approximately match the cross-sectional scale of $\sigma_i$.
 - If constraints are tightened, TC should generally weakly decrease.
 - Realized IR should broadly track theoretical $TC \times IC \times \sqrt{BR}$.
 
@@ -852,8 +1102,8 @@ Deliverables:
 
 ### Phase 3: Synthetic alpha and covariance engines
 
-1. implement latent alpha generation,
-2. implement target-IC forecast generation,
+1. implement standardized score generation,
+2. implement Eq. (9)-style target-IC forecast generation,
 3. implement diagonal covariance generator,
 4. implement optional factor covariance generator,
 5. add validation helpers for realized IC calibration.
@@ -971,8 +1221,10 @@ This checklist is intended for sequential execution after design approval.
 
 ### Step 5: Synthetic model implementation
 
-- [ ] Implement latent alpha generator
-- [ ] Implement forecast alpha generator with target IC
+- [ ] Implement standardized score generator
+- [ ] Implement forecast residual return generator with target IC
+- [ ] Implement realized residual return generator with target IC
+- [ ] Implement residual volatility vector generator
 - [ ] Implement diagonal covariance generator
 - [ ] Implement factor covariance option
 - [ ] Add reproducibility via random seed control
