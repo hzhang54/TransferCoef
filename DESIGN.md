@@ -53,6 +53,7 @@ The target deliverable for this project is a reproducible python workflow that c
 - aggregate results across simulation trials,
 - recreate a programmatic equivalent of Table 2.
 
+Note: the current implementation runs entirely from synthetic Monte Carlo inputs and does not require external market data.  The `data_loader.py` module exists only to support an optional future historical-calibration mode.
 ---
 
 ## 3. Scope
