@@ -150,61 +150,61 @@ def summarize_trials(trial_results: list[MonteCarloTrialResult]) -> pd.DataFrame
 
 
 
-    def run_monte_carlo(config: AppConfig) -> MonteCarloRunResult:
-        """Run the full synthetic Monte Carlo experiment for the configured scenarios."""
+def run_monte_carlo(config: AppConfig) -> MonteCarloRunResult:
+    """Run the full synthetic Monte Carlo experiment for the configured scenarios."""
 
-        rng = np.random.default_rng(config.simulation.random_seed)
-        trial_results: list[MonteCarloTrialResult] = []
-        previous_weights_by_scenario: dict[str, pd.Series] = {}
+    rng = np.random.default_rng(config.simulation.random_seed)
+    trial_results: list[MonteCarloTrialResult] = []
+    previous_weights_by_scenario: dict[str, pd.Series] = {}
 
-        for trial_id in range(config.simulation.num_trials):
-            trial_result = run_single_trial(
-                config=config,
-                trial_id=trial_id,
-                rng=rng,
-                previous_weights_by_scenario=(
-                    previous_weights_by_scenario
-                    if config.simulation.include_turnover_path_dynamics
-                    else None
-                ),
-            )
-            trial_results.append(trial_result)
-            
-            if config.simulation.include_turnover_path_dynamics:
-                previous_weights_by_scenario = {
-                    scenario_name: result.weights
-                    for scenario_name, result in trial_result.scenario_results.items()
-                }
-
-        trial_diagnostics_frame = trial_diagnostics_to_frame(trial_results)
-        summary_frame = summarize_trials(trial_results)
-
-        return MonteCarloRunResult(
+    for trial_id in range(config.simulation.num_trials):
+        trial_result = run_single_trial(
             config=config,
-            trial_results=trial_results,
-            trial_diagnostics_frame=trial_diagnostics_frame,
-            summary_frame=summary_frame,
-        ) 
+            trial_id=trial_id,
+            rng=rng,
+            previous_weights_by_scenario=(
+                previous_weights_by_scenario
+                if config.simulation.include_turnover_path_dynamics
+                else None
+            ),
+        )
+        trial_results.append(trial_result)
+        
+        if config.simulation.include_turnover_path_dynamics:
+            previous_weights_by_scenario = {
+                scenario_name: result.weights
+                for scenario_name, result in trial_result.scenario_results.items()
+            }
 
-    def build_scenario_overview(config: AppConfig) -> pd.DataFrame:
-        """Return a compact DataFrame describing configured scenarios."""
-    
-        rows: list[dict[str, object]] = []
-        for scenario in config.scenarios:
-            rows.append(_scenario_to_record(scenario))
-        return pd.DataFrame(rows)
+    trial_diagnostics_frame = trial_diagnostics_to_frame(trial_results)
+    summary_frame = summarize_trials(trial_results)
 
-    def _scenario_to_record(scenario: ScenarioConfig) -> dict[str, object]:
-        return {
-            "name": scenario.name,
-            "description": scenario.description,
-            "long_only": scenario.long_only,
-            "leverage_limit": scenario.leverage_limit,
-            "max_weight": scenario.max_weight,
-            "min_weight": scenario.min_weight,
-            "turnover_limit": scenario.turnover_limit,
-            "dollar_neutral": scenario.dollar_neutral,
-        }
+    return MonteCarloRunResult(
+        config=config,
+        trial_results=trial_results,
+        trial_diagnostics_frame=trial_diagnostics_frame,
+        summary_frame=summary_frame,
+    ) 
+
+def build_scenario_overview(config: AppConfig) -> pd.DataFrame:
+    """Return a compact DataFrame describing configured scenarios."""
+
+    rows: list[dict[str, object]] = []
+    for scenario in config.scenarios:
+        rows.append(_scenario_to_record(scenario))
+    return pd.DataFrame(rows)
+
+def _scenario_to_record(scenario: ScenarioConfig) -> dict[str, object]:
+    return {
+        "name": scenario.name,
+        "description": scenario.description,
+        "long_only": scenario.long_only,
+        "leverage_limit": scenario.leverage_limit,
+        "max_weight": scenario.max_weight,
+        "min_weight": scenario.min_weight,
+        "turnover_limit": scenario.turnover_limit,
+        "dollar_neutral": scenario.dollar_neutral,
+    }
 
         
     
