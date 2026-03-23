@@ -274,6 +274,31 @@ This is the residual covariance matrix only.
 
 For each trial, we need both unconstrained and constrained portfolios.
 
+#### Current optimizer behavior in the codebase
+
+The current implementation does **not** yet express every scenario through one unified `cvxportfolio` optimization call.
+
+Instead, it currently uses a two-stage approach:
+
+1. **Unconstrained reference portfolio** is computed analytically with a closed-form linear solve,
+2. **Constrained scenario portfolio** first attempts execution through local `cvxportfolio.SinglePeriodOptimization`,
+3. if that execution raises an exception, the code falls back to a deterministic approximation that clips / recales the unconstrained weights to satisfy the requested constraints.
+
+So the current implementation is **not** "cvxportfolio-free" but it is also **not yet purely cvxportfolio-driven** end to end.
+
+In symbols, the unconstrained reference portfolio is currently computed as:
+
+$$
+w^u \propto (\lambda \Sigma + \epsilon I)^{-1} \alpha
+$$
+
+followed by gross-leverage normalization.
+
+This portfolio is then used as:
+
+- the direct result for the unconstrained scenario, and 
+- the input to the heuristic fallback path for constrained scenarios when real `cvxportfolio` execution fails.
+
 #### Unconstrained target portfolio
 
 A simplified Markowitz-style active portfolio:
@@ -289,6 +314,33 @@ subject to baseline feasibility conditions such as:
 - optional leverage normalization.
 
 This portfolio serves as the reference portfolio for TC.
+
+#### Constrained portfolio under the current implementation
+
+For constrained scenarios, the intended path is to construct a local `cvxportfolio.SinglePeriodOptimization` policy with:
+
+- `ReturnForecast(forecast_alpha)`,
+- `FullCovariance(covariance)`, and
+- scenario-specific constraints such as `LongOnly`, `LeverageLimit`, `MaxWeights`, `TurnoverLimit`, and `DollarNeutral`.
+
+The policy is then executed locally through `policy.execute(...)` using a synthetic holdings vector.
+
+If that call succeeds, the constrained portfolio is a genuine local `cvxportfolio` result.
+
+If that call fails for any reason, the code currently falls back to a simplified approximation that:
+
+- clips negative weights for long-only,
+- applies min/max bounds,
+- recenters for dollar neutrality when requested,
+- rescales to the leverage target,
+- and, when applicable, shrinks the trade relative to previous weights to satisfy the turnover limit.
+
+This fallback is intentionally pragmatic, but it is only an approximation to the true constrained optimizer.
+
+Therefore, when interpreting results, it is important to distinguish between:
+
+- trials solved by actual local `cvxportfolio` execution, and
+- trials solved by the approximate fallback layer.
 
 ---
 
@@ -706,6 +758,15 @@ Use `SinglePeriodOptimization` with explicit objective and scenario constraints 
 - optional benchmark-relative active allocations.
 
 This is the preferred route for implementing the paper's constrained vs. unconstrained portfolio comparison.
+
+#### Current implementation status of the optimization engine
+
+The codebase currently uses local `cvxportfolio` for the constrained-policy execution path, but with an important caveat:
+
+- the unconstrained reference portfolio is still computed analytically outside `cvxportfolio`, and 
+- constrained scenarios fall back to a local heuristic approxiation if `SinglePeriodOptimization.execute(...)` fails.
+
+This should remain clearly documented because Table 2 diagnostics may otherwise be misread as fully arising from exect constrained optimization in every trial.
 
 ---
 
