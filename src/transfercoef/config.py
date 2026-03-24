@@ -80,7 +80,7 @@ class AppConfig:
     data: Dataconfig = field(default_factory=Dataconfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
-    Scenarios: tuple[ScenarioConfig, ...] = field(default_factory=tuple)
+    scenarios: tuple[ScenarioConfig, ...] = field(default_factory=tuple)
 
 
 DEFAULT_SCENARIOS: tuple[ScenarioConfig, ...] = (
