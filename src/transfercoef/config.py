@@ -3,6 +3,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+DEFAULT_TRACKING_ERROR_TARGETS: tuple[float, ...] = (
+    0.02, 0.04, 0.06, 0.08, 0.10
+)
+
 @dataclass(frozen=True)
 class ProjectPaths:
     """Filesystem locations used by the project."""
@@ -63,6 +67,11 @@ class SimulationConfig:
     use_risk_weighted_tc: bool = True
     report_plain_tc: bool = True
     include_turnover_path_dynamics: bool = False
+    enable_tracking_error_frontier: bool = True
+    tracking_error_targets: tuple[float, ...] = DEFAULT_TRACKING_ERROR_TARGETS
+    frontier_mode: str = "hybrid"
+    include_unconstrained_frontier_reference: bool = True
+    tracking_error_label_precision: int = 4
 
 @dataclass(frozen=True)
 class OutputConfig:

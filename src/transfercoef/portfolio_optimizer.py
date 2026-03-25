@@ -22,7 +22,8 @@ class OptimizationInputs:
     convariance: pd.DataFrame
     risk_aversion: float
     previous_weights: pd.Series | None = None
-
+    tracking_error_target: float | None = None
+    frontier_mode: str | None = None
 
 @dataclass(frozen=True)
 class OptimizationResult:
@@ -85,11 +86,14 @@ def solve_unconstrained_weights(inputs: OptimizationInputs) -> pd.Series:
 def build_constraint_objects(
     project_root: str | Path,
     scenario: ScenarioConfig,
+    covariance: pd.DataFrame | None = None,
+    tracking_error_target: float | None = None,    
 ) -> list[object]:
     """Construct local cvxportfolio constraint objects for a scenario."""
     
     constraints = []
     classes = get_common_constraint_classes(project_root)
+    objective_classes = get_common_objective_classes(project_root)
 
     if scenario.long_only:
         constraints.append(classes["LongOnly"]())
@@ -103,6 +107,14 @@ def build_constraint_objects(
         constraints.append(classes["TurnoverLimit"](scenario.turnover_limit))
     if scenario.dollar_neutral is not None:
         constraints.append(classes["DollarNeutral"]())
+    if tracking_error_target is not None:
+        if tracking_error_target <= 0:
+            raise ValueError("tracking_error_target must be positive when provided.")
+        if covariance is None:
+            raise ValueError("covariance is required when building a tracking-error constraint.")
+        constraints.append(
+            objective_classes["FullCovariance"](covariance) <= float(tracking_error_target) ** 2
+        )
 
     return constraints
     
@@ -112,6 +124,8 @@ def build_single_period_policy(
     forecast_alpha: pd.Series,
     covariance: pd.DataFrame,
     risk_aversion: float,
+    tracking_error_target: float | None = None,
+    frontier_mode: str | None = None,
 ) -> object:
     """Build a local cvxportfolio single-period policy for a scenario."""
 
@@ -123,12 +137,29 @@ def build_single_period_policy(
     objective_classes = get_common_objective_classes(project_root)
     single_period_optimization = get_single_period_optimization_class(project_root)
 
-    objectives = (
-        objective_classes["ReturnsForecast"](aligned_forecast_alpha)
-        - risk_aversion * objective_classes["FullCovariance"](aligned_covariance)
-    )
-    constraints = build_constraint_objects(project_root, scenario)
+    #objectives = (
+    #    objective_classes["ReturnsForecast"](aligned_forecast_alpha)
+    #    - risk_aversion * objective_classes["FullCovariance"](aligned_covariance)
+    #)
+    #constraints = build_constraint_objects(project_root, scenario)
     
+    normalized_frontier_mode =  (frontier_mode or "hybrid").strip().lower().replace("-", "_")
+    if normalized_frontier_mode not in {"hybrid", "pure_risk_budget"}:
+        raise ValueError(
+            "frontier_mode must be one of {'hybrid', 'pure_risk_budget'} when provided."
+        )
+    
+    objective = objective_classes["ReturnsForecast"](aligned_forecast_alpha)
+    if normalized_frontier_mode == "hybrid":
+        objective = objective - risk_aversion * objective_classes["FullCovariance"](aligned_covariance)
+    
+    constraints = build_constraint_objects(
+        project_root=project_root,
+        scenario=scenario,
+        covariance=aligned_covariance,
+        tracking_error_target=tracking_error_target,
+    )
+
     return single_period_optimization(
         objectives=objectives,
         constraints=constraints,
@@ -188,6 +219,8 @@ def execute_real_policy(
         forecast_alpha=aligned_forecast_alpha,
         covariance=aligned_covariance,
         risk_aversion=inputs.risk_aversion,
+        tracking_error_target=inputs.tracking_error_target,
+        frontier_mode=inputs.frontier_mode,
     )
     
     holdings = build_holdings_from_weights(
@@ -272,9 +305,17 @@ def optimize_scenarios(
                 "policy": policy,
                 "description": scenario.description,
                 "fallback_used": False,
+                "tracking_error_target": inputs.tracking_error_target,
+                "frontier_mode": inputs.frontier_mode,
             },
         )
     except Exception as exc:
+        if inputs.tracking_error_target is not None:
+            raise RuntimeError(
+                "Tracking-error constrained optimization requires successful local cvxportfolio execution; "
+                "heuristic fallback is disabled for TE-constrained runs."
+            ) from exc
+
         approximate_weights = approximate_constrained_weights(
             unconstrained_weights=unconstrained_weights,
             scenario=scenario,
@@ -289,6 +330,8 @@ def optimize_scenarios(
                 "description": scenario.description,
                 "fallback_used": True,
                 "fallback_reason": str(exc),
+                "tracking_error_target": inputs.tracking_error_target,
+                "frontier_mode": inputs.frontier_mode,
             },
         )
                 
@@ -314,6 +357,7 @@ def build_optimization_inputs(
     covariance: pd.DataFrame,
     simulation_config: SimulationConfig,
     previous_weights: pd.Series | None = None,
+    tracking_error_target: float | None = None,
 ) -> OptimizationInputs:
     """Create optimization inputs from the shared simulation configuration."""
 
@@ -322,6 +366,8 @@ def build_optimization_inputs(
         covariance=covariance,
         risk_aversion=simulation_config.risk_aversion,
         previous_weights=previous_weights,
+        tracking_error_target=tracking_error_target,
+        frontier_mode=simulation_config.frontier_mode,
     )
         
 

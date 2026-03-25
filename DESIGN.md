@@ -573,6 +573,63 @@ The same objective is re-solved under realistic implementation constraints, such
 
 Each constraint set defines one scenario column in the replicated Table 2 output.
 
+#### Paper-style tacking-error fronter within a scenario
+
+The paper's TC analysis is not limited to a single optimized portfolio per scenario.  For a fixed constraint regime, the constrained optimizer is evaluated at multiple **tracking-error targets**.
+
+Conceptually, for one scenario we solve a family of problems indexed by a risk budget:
+
+$$
+\max_{w} \; \alpha^T w \quad \text{s.t.} \quad w^T \Sigma w \le TE_{target}^2,
+$$
+
+plus the scenario's implementation constrains such as long-only, max-weight, turnover, or leverage restrictions.
+
+Equivalently, in the general benchmark-relative formulation this would be written as:
+
+$$
+\max_{\Delta w} \; \alpha^T \Delta w \quad \text{s.t.} \quad \Delta w^T \Sigma \Delta w \le TE_{target}^2,
+$$
+
+this produces a **TC-versus-TE curve** for each scenario rather than a single TC number.
+
+For the current implementation scope, which assumes an all-cash benchmark special case, active weights reduce to portfolio weights and tracking error reduces to portfolio volatility:
+
+$$
+TE = \sqrt{w^T \Sigma w}
+$$
+
+Under the current residual-risk-only covariance model, this is specifically the volatility implied by:
+
+$$
+\Sigma = D = \operatorname{diag}(\sigma_1^2, \dots, \sigma_N^2).
+$$
+
+Therefore the paper-style frontier can be implemented now as a **volatility-target seep within each scenario**, while clearly documenting that this is the cash-benchmark special case of the broader benchmark-relative TE frontier in the paper.
+
+The implementation consequence is important:
+
+- one scenario will correspond to multiple optimization runs,
+- each run will be keyed by a `tracking_error_target`,
+- diagnostics and reporting must aggregate by both scenario and TE level,
+- and the TE-constrained runs should rely on the real quadratic optimizer rather than heuristic post-processing.
+
+To optimizer modes should be supported for these frontier runs:
+
+1. **Hybrid mode**: retain the existing soft quadratic risk penalty in the objective and add a hard TE cap,
+
+$$
+\max_w \; \alpha^T w - \lambda w^T \Sigma w \quad \text{s.t.} \quad w^T \Sigma w \le TE_{target}^2
+$$
+
+2. **Pure risk-budget mode**: remove the soft risk penalty and enforce only the hard TE cap,
+
+$$
+\max_w \; \alpha^T w \quad \text{s.t.} \quad w^T \Sigma w \le TE_{target}^2
+$$
+
+For the current codebase, pure risk-budget model should be interpreted as a property of the **TE-constrained optimization path only**.  It should not be approximated by setting the global unconstrained closed-form solver's risk aversion to zero, because that analytic solver is derived from the penalized mean-variance problem rather than the hard-budget formulation.
+
 ---
 
 ### 5.4 Ex post diagnostics to compute per trial
@@ -1009,6 +1066,33 @@ optional advanced scenarios can add:
 - benchmark deviation constraints,
 - factor neutrality.
 
+### 8.1 Tracking-error frontier overlay
+
+For paper-style TC curves, the scenario definitions above should be treated as **constraint families**, not single portfolio instances.
+
+For each selected scenario, the simulation should evaluate multiple tracking-error targets, for example:
+
+- low TE,
+- medium TE,
+- high TE.
+
+In the current cash-benchmark implementation these targets are portfolio-volatility targets under the residual covariance matrix.
+
+This means the effective run structure becomes:
+
+1. choose scenario,
+2. choose tracking-error target
+3. solve one constrained optimization problem,
+4. compute TC and other diagnostics,
+5. repeat over the TE grid.
+
+So the natural reporting unit for the frontier extension is not just ``scenario_name`` but the pair: 
+$$
+(scenario, \; tracking\_error\_target).
+$$
+
+The unconstrained reference portfolio remains the same reference for TC comparison unless a separate unconstrained portfolio is intentionally re-scaled for TE normalization.
+
 ---
 
 ## 9. Key Design Decisions
@@ -1181,8 +1265,9 @@ Deliverables:
 1. implement unconstrained optimizer path,
 2. implement cvxportfolio-backed constrained optimizer,
 3. define scenario builders using local constraints,
-4. validate weight normalization and feasibility,
-5. add tests for scenario behavior.
+4. add quadratic tracking-error constraints for TE frontier runs,
+5. validate weight normalization and feasibility,
+6. add tests for scenario behavior.
 
 Deliverables:
 
@@ -1194,9 +1279,10 @@ Deliverables:
 
 1. define trial result record schema,
 2. implement single-trial pipeline,
-3. implement many-trial ochestration,
-4. aggregate by scenario,
-5. persist long-format results.
+3. expand scenarios across tracking-error targets,
+4. implement many-trial ochestration,
+5. aggregate by scenario and TE level,
+6. persist long-format results.
 
 Deliverables:
 
@@ -1207,9 +1293,10 @@ Deliverables:
 
 1. define final symmary table layout,
 2. compute theoretical vs realized diagnostics,
-3. export CSB and pretty console view,
-4. optionally add Excel export,
-5. compare outputs to paper expectations.
+3. define TC-versus-TE frontier output layout,
+4. export CSV and pretty console view,
+5. optionally add Excel export,
+6. compare outputs to paper expectations.
 
 Deliverables:
 
@@ -1300,6 +1387,8 @@ This checklist is intended for sequential execution after design approval.
 - [ ] Implement scenario builder for max-weight constraint
 - [ ] Implement scenario builder for turnover limit
 - [ ] Implement combined-constraint scenario
+- [ ] Add quadratic tracking-error constraint support
+- [ ] Decide TE-fallback policy for solver failures
 - [ ] Add optimizer unit tests
 
 ### Step 7: Monte Carlo engine
@@ -1307,6 +1396,7 @@ This checklist is intended for sequential execution after design approval.
 - [ ] Define trial result dataclass / schema
 - [ ] Implement one-trial execution funciton
 - [ ] Implement scenario loop per trial
+- [ ] Expand each scenario across TE targets
 - [ ] Implement many-trial execution function
 - [ ] Store long-format trial results in DataFrame
 - [ ] Add reproducibility and seed logging
@@ -1316,6 +1406,7 @@ This checklist is intended for sequential execution after design approval.
 - [ ] Implement aggregated summary statistics
 - [ ] Implement theoretical IR calculation variants
 - [ ] Format Table 2-style output
+- [ ] Add TC-versus-TE frontier output
 - [ ] Export summary to CSV
 - [ ] Export trial-level data to CSV
 - [ ] Add reporting tests
