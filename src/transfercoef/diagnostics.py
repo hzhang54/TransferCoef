@@ -16,12 +16,18 @@ class TrialDiagnostics:
     """Diagnostic computed for a single scenario in one simulation trial."""
 
     scenario_name: str
+    tracking_error_target: float | None
+    frontier_mode: str | None
+    optimization_method: str | None
+    solver_success: bool
     ex_post_ic: float
     alpha_over_ic_dispersion: float
     realized_return_over_sigma_dispersion: float
     transfer_coefficient: float
     risk_weighted_transfer_coefficient: float
     active_return: float
+    active_risk: float
+    realized_tracking_error: float
     information_ratio: float
     theoretical_information_ratio: float
 
@@ -30,12 +36,18 @@ class TrialDiagnostics:
         return pd.Series(
             {
                 "scenario_name": self.scenario_name,
+                "tracking_error_target": self.tracking_error_target,
+                "frontier_mode": self.frontier_mode,
+                "optimization_method": self.optimization_method,
+                "solver_success": self.solver_success,
                 "ex_post_ic": self.ex_post_ic,
                 "alpha_over_ic_dispersion": self.alpha_over_ic_dispersion,
                 "realized_return_over_sigma_dispersion": self.realized_return_over_sigma_dispersion,
                 "transfer_coefficient": self.transfer_coefficient,
                 "risk_weighted_transfer_coefficient": self.risk_weighted_transfer_coefficient,
                 "active_return": self.active_return,
+                "active_risk": self.active_risk,
+                "realized_tracking_error": self.realized_tracking_error,
                 "information_ratio": self.information_ratio,
                 "theoretical_information_ratio": self.theoretical_information_ratio,
             }
@@ -127,6 +139,10 @@ def build_trial_diagnostics(
     covariance: pd.DataFrame,
     breadth: float,
     risk_weights: pd.Series | None = None,
+    tracking_error_target: float | None = None,
+    frontier_mode: str | None = None,
+    optimization_method: str | None = None,
+    solver_success: bool | None = None,
 ) -> TrialDiagnostics:
     """Compute all single-trial diagnostics for one scenario."""
 
@@ -150,6 +166,7 @@ def build_trial_diagnostics(
     
     active_return = compute_active_return(constrained_weights, realized_return)
     active_risk = compute_active_risk(constrained_weights, covariance)
+    realized_tracking_error = active_risk
     information_ratio = compute_information_ratio(active_return, active_risk)
     theoretical_information_ratio = compute_theoretical_information_ratio(
         information_coefficient=ex_post_ic,
@@ -158,12 +175,18 @@ def build_trial_diagnostics(
     )
     return TrialDiagnostics(
         scenario_name=scenario_name,
+        tracking_error_target=tracking_error_target,
+        frontier_mode=frontier_mode,
+        optimization_method=optimization_method,
+        solver_success=solver_success,
         ex_post_ic=ex_post_ic,
         alpha_over_ic_dispersion=alpha_over_ic_dispersion,
         realized_return_over_sigma_dispersion=realized_return_over_sigma_dispersion,
         transfer_coefficient=tc_result.plain_tc,
         risk_weighted_transfer_coefficient=tc_result.risk_weighted_tc,
         active_return=active_return,
+        active_risk=active_risk,
+        realized_tracking_error=realized_tracking_error,
         information_ratio=information_ratio,
         theoretical_information_ratio=theoretical_information_ratio,
     )
@@ -177,13 +200,21 @@ def aggregate_trial_diagnostics(
         return pd.DataFrame()
 
     frame = pd.DataFrame([diagnostic.to_series() for diagnostic in trial_diagnostics])
+    group_columns = ["scenario_name"]
+    if "tracking_error_target" in frame.columns and frame["tracking_error_target"].notna().any():
+        group_columns.extend(["tracking_error_target", "frontier_mode"])
+
+    excluded_columns = set(group_columns + ["optimization_method"])
     numeric_columns = [
         column
-        for column in frame.columns
-        if column != "scenario_name"
+#        for column in frame.columns
+#        if column not in group_columns
+        for column in frame.select_dtypes(include=["number", "bool"]).columns
+        if column not in excluded_columns
     ]
 
-    aggregated = frame.groupby("scenario_name", dropna=False)[numeric_columns].agg(["mean", "std"])
+    #aggregated = frame.groupby("scenario_name", dropna=False)[numeric_columns].agg(["mean", "std"])
+    aggregated = frame.groupby(group_columns, dropna=False)[numeric_columns].agg(["mean", "std"])
     aggregated.columns = [f"{metric}_{statistic}" for metric, statistic in aggregated.columns]
     return aggregated.reset_index()
 
@@ -207,6 +238,8 @@ def build_table2_layout(summary_frame: pd.DataFrame) -> pd.DataFrame:
         "Std risk-weighted TC": "risk_weighted_transfer_coefficient_std",
         "Mean active return": "active_return_mean",
         "Mean active risk": "active_risk_mean",
+        "Mean realized tracking error": "realized_tracking_error_mean",
+        "Std realized tracking error": "realized_tracking_error_std",
         "Mean ex post IR": "information_ratio_mean",
         "Std ex post IR": "information_ratio_std",
         "Mean theoretical IR": "theoretical_information_ratio_mean",
