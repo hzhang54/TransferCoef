@@ -79,6 +79,30 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Carry previous scenario weights across trials when turnover limits are enabled.",
     )
+    # --enable-tracking-error-frontier argument of string type with no default, with help message "Enable paper-style TC-versus-TE frontier runs.  In the current cash-benchmark "
+    parser.add_argument(
+        "--enable-tracking-error-frontier",
+        action="store_true",
+        help=(
+            "Enable paper-style TC-versus-TE frontier runs.  In the current cash-benchmark "
+            "special case, TE is portfolio volatility under the residual covariance."
+            ),
+    )
+    # --tracking-error-targets argument of string type with no default, with help message "Optional list of positive TE targets, e.g. --tracking-error-targets 0.02 0.04 0.06."
+    parser.add_argument(
+        "--tracking-error-targets",
+        nargs="*",
+        type=float,
+        default=None,
+        help="Optional list of positive TE targets, e.g. --tracking-error-targets 0.02 0.04 0.06.",
+    )
+    # --frontier-mode argument with no default, two choices: hybrid or pure_risk_budget, with help message "Choose frontier optimzation mode: hybrid or pure_risk_budget.
+    parser.add_argument(
+        "--frontier-mode",
+        choices=["hybrid", "pure_risk_budget"],
+        default=None,
+        help="Choose frontier optimzation mode: hybrid or pure_risk_budget.",
+    )
     # --use-historical-calibration argument of string type with no default, with help message "Enable historical calibration mode in the config for later integration work."
     parser.add_argument(
         "--use-historical-calibration",
@@ -99,6 +123,12 @@ def build_runtime_config(args: argparse.Namespace) -> AppConfig:
 
     base_config = build_default_config(args.project_root)
 
+    tracking_error_targets = base_config.simulation.tracking_error_targets
+    if args.tracking_error_targets is not None:
+        if any(target <= 0 for target in args.tracking_error_targets):
+            raise ValueError("All tracking error targets must be positive.")
+        tracking_error_targets = tuple(sorted({float(target) for target in args.tracking_error_targets}))
+
     simulation = replace(
         base_config.simulation,
         num_trials=args.num_trials if args.num_trials is not None else base_config.simulation.num_trials,
@@ -111,6 +141,13 @@ def build_runtime_config(args: argparse.Namespace) -> AppConfig:
             if args.include_turnover_path_dynamics
             else base_config.simulation.include_turnover_path_dynamics
         ),
+        enable_tracking_error_frontier=(
+            args.enable_tracking_error_frontier
+            if args.enable_tracking_error_frontier
+            else base_config.simulation.enable_tracking_error_frontier
+        ),
+        tracking_error_targets=tracking_error_targets,
+        frontier_mode=args.frontier_mode if args.frontier_mode is not None else base_config.simulation.frontier_mode,
     )
     
     output = replace(
