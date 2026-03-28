@@ -85,45 +85,44 @@ def compute_risk_weighted_transfer_coefficient(
     return numerator / float(left_norm * right_norm)
 
 
-    def inverse_variance_risk_weights(covariance: pd.DataFrame | pd.Series) -> pd.Series:
-        """Create inverse-variance weights from a covariance matrix or variance vector."""
-        if isinstance(covariance, pd.DataFrame):
-            variance = pd.Series(np.diag(covariance.to_numpy(dtype=float)), index=covariance.index)
-        else:
-            variance = covariance.astype(float)
-        
-        safe_variance = variance.replace(0.0, np.nan)
-        inv_var = 1.0 / safe_variance
-        inv_var = inv_var.replace([np.inf, -np.inf], np.nan).dropna()
-        return inv_var
-
+def inverse_variance_risk_weights(covariance: pd.DataFrame | pd.Series) -> pd.Series:
+    """Create inverse-variance weights from a covariance matrix or variance vector."""
+    if isinstance(covariance, pd.DataFrame):
+        variance = pd.Series(np.diag(covariance.to_numpy(dtype=float)), index=covariance.index)
+    else:
+        variance = covariance.astype(float)
     
+    safe_variance = variance.replace(0.0, np.nan)
+    inv_var = 1.0 / safe_variance
+    inv_var = inv_var.replace([np.inf, -np.inf], np.nan).dropna()
+    return inv_var
+
         
-    def build_transfer_coefficient_result(
-        unconstrained_weights: pd.Series,
-        constrained_weights: pd.Series,
-        covariance: pd.DataFrame | pd.Series | None = None,
-        risk_weights: pd.Series | None = None,
-    ) -> TransferCoefficientResult:
-        """Compute both plain and risk-weighted transfer coefficients."""
-        
-        effective_risk_weights = risk_weights
-        if effective_risk_weights is None:
-            if covariance is None:
-                raise ValueError("Either covariance or risk_weights must be provided.")
-            effective_risk_weights = inverse_variance_risk_weights(covariance)
-        
-        plain_tc = compute_plain_transfer_coefficient(
-            unconstrained_weights=unconstrained_weights,
-            constrained_weights=constrained_weights,
-        )
-        risk_weighted_tc = compute_risk_weighted_transfer_coefficient(
-            unconstrained_weights=unconstrained_weights,
-            constrained_weights=constrained_weights,
-            risk_weights=effective_risk_weights,
-        )
-        return TransferCoefficientResult(
-            plain_tc=plain_tc,
-            risk_weighted_tc=risk_weighted_tc,
-        )
+def build_transfer_coefficient_result(
+    unconstrained_weights: pd.Series,
+    constrained_weights: pd.Series,
+    covariance: pd.DataFrame | pd.Series | None = None,
+    risk_weights: pd.Series | None = None,
+) -> TransferCoefficientResult:
+    """Compute both plain and risk-weighted transfer coefficients."""
+    
+    effective_risk_weights = risk_weights
+    if effective_risk_weights is None:
+        if covariance is None:
+            raise ValueError("Either covariance or risk_weights must be provided.")
+        effective_risk_weights = inverse_variance_risk_weights(covariance)
+    
+    plain_tc = compute_plain_transfer_coefficient(
+        unconstrained_weights=unconstrained_weights,
+        constrained_weights=constrained_weights,
+    )
+    risk_weighted_tc = compute_risk_weighted_transfer_coefficient(
+        unconstrained_weights=unconstrained_weights,
+        constrained_weights=constrained_weights,
+        risk_weights=effective_risk_weights,
+    )
+    return TransferCoefficientResult(
+        plain_tc=plain_tc,
+        risk_weighted_tc=risk_weighted_tc,
+    )
     

@@ -146,7 +146,7 @@ def build_trial_diagnostics(
 ) -> TrialDiagnostics:
     """Compute all single-trial diagnostics for one scenario."""
 
-    ex_post_ic = compute_ex_post_ic(forecast_alpha, realized_return)
+    ex_post_ic = compute_ex_post_ic(forecast_alpha, realized_returns)
     alpha_over_ic_dispersion = compute_alpha_over_ic_dispersion(
         forecast_alpha,
         ex_post_ic,
@@ -164,7 +164,7 @@ def build_trial_diagnostics(
         risk_weights=risk_weights,
     )
     
-    active_return = compute_active_return(constrained_weights, realized_return)
+    active_return = compute_active_return(constrained_weights, realized_returns)
     active_risk = compute_active_risk(constrained_weights, covariance)
     realized_tracking_error = active_risk
     information_ratio = compute_information_ratio(active_return, active_risk)
