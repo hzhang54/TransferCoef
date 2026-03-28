@@ -19,7 +19,7 @@ class OptimizationInputs:
     """Inputs required to construct one portfolio optimization problem."""
 
     forecast_alpha: pd.Series
-    convariance: pd.DataFrame
+    covariance: pd.DataFrame
     risk_aversion: float
     previous_weights: pd.Series | None = None
     tracking_error_target: float | None = None
@@ -72,7 +72,7 @@ def solve_unconstrained_weights(inputs: OptimizationInputs) -> pd.Series:
 
     aligned_forecast_alpha, aligned_covariance = _prepare_optimization_data(
         inputs.forecast_alpha, 
-        inputs.convariance
+        inputs.covariance
     )
 
     alpha = aligned_forecast_alpha.to_numpy(dtype=float)
@@ -211,7 +211,7 @@ def execute_real_policy(
     
     aligned_forecast_alpha, aligned_covariance = _prepare_optimization_data(
         inputs.forecast_alpha,
-        inputs.convariance,
+        inputs.covariance,
     )
     policy = build_single_period_policy(
         project_root=project_root,
@@ -283,9 +283,9 @@ def approximate_constrained_weights(
 
     return constrained.rename(f"{scenario.name}_weights")
 
-def optimize_scenarios(
+def optimize_scenario(
     project_root: str | Path,
-    scenarios: ScenarioConfig,
+    scenario: ScenarioConfig,
     inputs: OptimizationInputs,
 ) -> OptimizationResult:
     """Optimize one scenario using the current project optimization contract."""
@@ -324,7 +324,7 @@ def optimize_scenarios(
         return OptimizationResult(
             scenario_name=scenario.name,
             weights=approximate_weights,
-            method="approximate_constrained_fallback",
+            method="approximate_constraints_fallback",
             metadata={
                 "policy": None,
                 "description": scenario.description,
@@ -345,7 +345,7 @@ def optimize_all_scenarios(
 
     results: dict[str, OptimizationResult] = {}
     for scenario in scenarios:
-        results[scenario.name] = optimize_scenarios(
+        results[scenario.name] = optimize_scenario(
             project_root=project_root,
             scenario=scenario,
             inputs=inputs,

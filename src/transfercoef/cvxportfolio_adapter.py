@@ -6,7 +6,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from .config import projectPaths
+from .config import ProjectPaths
 
 class CvxportfolioImportError(ImportError):
     """Raised when the local cvxportfolio source tree cannot be imported."""
