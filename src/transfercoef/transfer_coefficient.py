@@ -49,9 +49,34 @@ def compute_plain_transfer_coefficient(
     unconstrained_weights: pd.Series,
     constrained_weights: pd.Series,
 ) -> float:
-    """Compute the plain Pearson transfer coefficient."""
+    """Compute the plain transfer coefficient.
+    
+    The preferred definition is the Pearson correlaiton of the two weight
+    vectors.  If Pearson correlation is undefined because one vector has zero
+    cross-sectional dispersion, fall back to cosine-style direction
+    alignment on the raw weights.  This preserves intuitive behavior for
+    degenerate case like constant unconstrained weights
+    """
 
-    return safe_correlation(unconstrained_weights, constrained_weights)
+    #return safe_correlation(unconstrained_weights, constrained_weights)
+    plain_tc = safe_correlation(unconstrained_weights, constrained_weights)
+    if not np.isnan(plain_tc):
+        return plain_tc
+
+    aligned_left, aligned_right = align_series(unconstrained_weights, constrained_weights)
+    if aligned_left.empty:
+        return float("nan")
+    
+    left_values = aligned_left.to_numpy(dtype=float)
+    right_values = aligned_right.to_numpy(dtype=float)
+
+    left_norm = float(np.linalg.norm(left_values))
+    right_norm = float(np.linalg.norm(right_values))
+
+    if np.isclose(left_norm, 0.0) or np.isclose(right_norm, 0.0):
+        return float("nan")
+    
+    return float(np.dot(left_values, right_values) / (left_norm * right_norm))
     
 def compute_risk_weighted_transfer_coefficient(
     unconstrained_weights: pd.Series,
