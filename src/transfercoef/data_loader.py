@@ -133,7 +133,7 @@ def load_calibration_from_config(
         project_root=config.paths.project_root,
         tickers=data_config.tickers,
         cash_key=data_config.cash_key,
-        base_location=config.paths.local_cvxporfolio_root.parent,
+        base_location=config.paths.local_cvxportfolio_root.parent,
         min_history_days=data_config.min_history_days,
     )
     return estimate_historical_calibration(bundle)

@@ -216,7 +216,7 @@ def summarize_trials(trial_results: list[MonteCarloTrialResult]) -> pd.DataFrame
 
     group_columns = ["scenario_name"]
     if diagnostics_frame["tracking_error_target"].notna().any():
-        group_columns.append(["tracking_error_target", "frontier_mode"])
+        group_columns.extend(["tracking_error_target", "frontier_mode"])
 
     numeric_columns = diagnostics_frame.select_dtypes(include=["number"]).columns.difference(["trial_id"])
     aggregated = diagnostics_frame.groupby(group_columns, dropna=False)[list(numeric_columns)].agg(["mean", "std"])

@@ -67,7 +67,7 @@ def get_common_constraint_classes(project_root: str | Path) -> dict[str, type[An
     cvxportfolio = import_cvxportfolio(project_root)
     return {
         "LongOnly": cvxportfolio.LongOnly,
-        "leverageLimit": cvxportfolio.LeverageLimit,
+        "LeverageLimit": cvxportfolio.LeverageLimit,
         "MaxWeights": cvxportfolio.MaxWeights,
         "MinWeights": cvxportfolio.MinWeights,
         "TurnoverLimit": cvxportfolio.TurnoverLimit,
@@ -79,7 +79,7 @@ def get_common_objective_classes(project_root: str | Path) -> dict[str, type[Any
 
     cvxportfolio = import_cvxportfolio(project_root)
     return {
-        "ReturnForecast": cvxportfolio.ReturnForecast,
+        "ReturnsForecast": cvxportfolio.ReturnsForecast,
         "CashReturn": cvxportfolio.CashReturn,
         "FullCovariance": cvxportfolio.FullCovariance,
         "DiagonalCovariance": cvxportfolio.DiagonalCovariance,

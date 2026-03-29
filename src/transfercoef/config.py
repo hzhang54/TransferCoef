@@ -15,7 +15,7 @@ class ProjectPaths:
     output_tables_dir: Path
     output_logs_dir: Path
     notebooks_dir: Path
-    local_cvxporfolio_root: Path
+    local_cvxportfolio_root: Path
 
     @classmethod
     def from_project_root(cls, project_root: str | Path) -> "ProjectPaths":
@@ -25,7 +25,7 @@ class ProjectPaths:
             output_tables_dir=root / "output" / "tables",
             output_logs_dir=root / "output" / "logs",
             notebooks_dir=root / "notebooks",
-            local_cvxporfolio_root= root / "cvxportfolio-master" / "cvxportfolio-master",
+            local_cvxportfolio_root= root / "cvxportfolio-master" / "cvxportfolio-master",
         )
 
 @dataclass(frozen=True)

@@ -161,7 +161,7 @@ def build_single_period_policy(
     )
 
     return single_period_optimization(
-        objectives=objectives,
+        objective=objective,
         constraints=constraints,
         include_cash_return=False,
     )
