@@ -70,7 +70,7 @@ def create_table2_summary(run_result: MonteCarloRunResult) -> Table2Summary:
     )
 
 def format_table2_for_display(
-    table_summary: pd.DataFrame,
+    table_frame: pd.DataFrame,
     float_precision: int = 6,
 ) -> pd.DataFrame:
     """Return a display-friendly rounded version of the Table 2 summary."""
@@ -101,7 +101,7 @@ def build_output_paths(config: AppConfig) -> dict[str, Path]:
     output_dir = config.paths.output_tables_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     return {
-        "table_csv": output_dir / f"{base_name}.csv",
+        "table2_csv": output_dir / f"{base_name}.csv",
         "scenario_summary_csv": output_dir / f"{base_name}_scenario_summary.csv",
         "trial_diagnostics_csv": output_dir / f"{base_name}_trial_diagnostics.csv",
         "frontier_summary_csv": output_dir / f"{base_name}_frontier_summary.csv",
