@@ -373,11 +373,37 @@ $$
 \Sigma = D = \operatorname{diag}(\sigma_1^2, \dots, \sigma_N^2).
 $$
 
+The reason the current constrained-weight generation uses a diagonal covariance matrix is precisely that the implementation is working in the **cash benchmark special case**.  With cash as benchmark, benchmark variance is taken to be zero and benchmark-related cross-asset covariance drops out, so only the diagonal residual-risk matrix remains.
+
+This is not meant to be a permanent structural restriction of the framework.  Once a **non-cash benchmark** and **per-asset benchmark betas** are introduced, the covariance structure will naturally become non-diagonal through the benchmark term:
+
+$$
+\Sigma = \sigma_B^2 \beta \beta^T + D
+$$
+
+So the framework is best understood as currently implementing the degenerate cash-benchmark case of the more general Appendix A model, rather than hard-coding diagonal covariance as a permanent modeling choice.
+
 This is exactly the covariance structure currently passed to the optimizer.
 
 Therefore, the current implementation is structurally consistent with the paper **only for this degenerate all-cash benchmark case**.
 
 It does **not** yet implement the full Appendix A model where cross-asset covariance comes through benchmark betas.
+
+#### comparison to Note 14 in the paper
+
+This distinction matters when comparing the current implementation to Note 14 on the last page of the
+paper.  In our current framework, the part of Note 14 dealing with **controlled generation of realized
+residual returns** is broadly true: realized residual returns are generated to match target statistical
+assumptions for IC and residual-risk scale, and they are cross-sectionally random under a diagonal
+residual covariance.
+
+However, the part of Note 14 stating that constrained active weights are generated using an **actual
+non-diagonal covariance matrix** is not true for the current implementation. Because we are in the
+cash-benchmark special case, the covariance matrix used for constrained-weight generation is diagonal.
+This discrepancy is caused by the current benchmark assumption, not by a permanent architectural
+limitation.  When a non-cash benchmark and asset-specific benchmark betas are introduced, the same
+framework will naturally support the non-diagonal covariance structure described in Appendix A and
+referenced in Note 14.
 
 #### Long-only interpretation under a cash benchmark
 
