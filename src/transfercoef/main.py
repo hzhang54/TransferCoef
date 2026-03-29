@@ -88,6 +88,11 @@ def parse_args() -> argparse.Namespace:
             "special case, TE is portfolio volatility under the residual covariance."
             ),
     )
+    parser.add_argument(
+        "--disable-tracking-error-frontier",
+        action="store_true",
+        help="Disable paper-style TC-versus-TE frontier runs.",
+    )
     # --tracking-error-targets argument of string type with no default, with help message "Optional list of positive TE targets, e.g. --tracking-error-targets 0.02 0.04 0.06."
     parser.add_argument(
         "--tracking-error-targets",
@@ -116,6 +121,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional ticker list for historical calibration mode.",
     )
+    parser.add_argument(
+        "--long-only",
+        action="store_true",
+        help="Apply long-only constraint to all scenarios.",
+    )
+    parser.add_argument(
+        "--disable-risk-weighted-tc",
+        action="store_true",
+        help="Disable risk-weighted transfer coefficient.",
+    )
     return parser.parse_args()
 
 def build_runtime_config(args: argparse.Namespace) -> AppConfig:
@@ -142,9 +157,11 @@ def build_runtime_config(args: argparse.Namespace) -> AppConfig:
             else base_config.simulation.include_turnover_path_dynamics
         ),
         enable_tracking_error_frontier=(
-            args.enable_tracking_error_frontier
-            if args.enable_tracking_error_frontier
-            else base_config.simulation.enable_tracking_error_frontier
+            False if args.disable_tracking_error_frontier
+            else (True if args.enable_tracking_error_frontier else base_config.simulation.enable_tracking_error_frontier)
+        ),
+        use_risk_weighted_tc=(
+            False if args.disable_risk_weighted_tc else base_config.simulation.use_risk_weighted_tc
         ),
         tracking_error_targets=tracking_error_targets,
         frontier_mode=args.frontier_mode if args.frontier_mode is not None else base_config.simulation.frontier_mode,
@@ -162,12 +179,17 @@ def build_runtime_config(args: argparse.Namespace) -> AppConfig:
         tickers=tuple(args.tickers) if args.tickers else base_config.data.tickers,
     )
 
+    scenarios = tuple(
+        replace(scenario, long_only=True) if args.long_only else scenario
+        for scenario in base_config.scenarios
+    )
+
     return AppConfig(
         paths=base_config.paths,
         data=data,
         simulation=simulation,
         output=output,
-        scenarios=base_config.scenarios,
+        scenarios=scenarios,
     )
 
 def run_application(config: AppConfig) -> dict[str, pd.DataFrame | pd.Series | dict[str, Path]]:
@@ -185,7 +207,7 @@ def run_application(config: AppConfig) -> dict[str, pd.DataFrame | pd.Series | d
         )
 
     return {
-        "scenario_overview": build_scenarios_overview(config),
+        "scenario_overview": build_scenario_overview(config),
         "table2": report_frames["table2"],
         "scenario_summary": report_frames["scenario_summary"],
         "trial_diagnostics": report_frames["trial_diagnostics"],

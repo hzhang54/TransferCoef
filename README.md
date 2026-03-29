@@ -12,6 +12,11 @@ To run the main application using the default configuration from the project roo
 $env:PYTHONPATH="src"; .\.venv\Scripts\python.exe -m transfercoef.main --project-root .
 ```
 
+Or with more restricted options:
+```powershell
+$env:PYTHONPATH="src"; .\.venv\Scripts\python.exe -m transfercoef.main --project-root . --num-trials 20 --disable-tracking-error-frontier --long-only --num-assets 10 --breadth 10 --disable-risk-weighted-tc
+```
+
 ## Running Tests
 
 To run specific test files using your virtual environment, execute the following command (for example, to run the diagnostics tests):
