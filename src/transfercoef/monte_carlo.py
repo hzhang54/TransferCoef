@@ -10,7 +10,7 @@ from .config import AppConfig, ScenarioConfig
 from .diagnostics import TrialDiagnostics, build_trial_diagnostics
 from .portfolio_optimizer import (
     OptimizationInputs,
-    OptimizationResults,
+    OptimizationResult,
     optimize_all_scenarios,
     solve_unconstrained_weights,
 )
@@ -32,7 +32,7 @@ class MonteCarloTrialResult:
     alpha_sample: AlphaSample
     covariance: pd.DataFrame
     unconstrained_weights: pd.Series
-    scenario_results: dict[str, OptimizationResults]
+    scenario_results: dict[str, OptimizationResult]
     scenario_diagnostics: dict[str, TrialDiagnostics]
     run_specs: dict[str, FrontierRunSpec]
 
@@ -105,7 +105,7 @@ def build_frontier_run_specs(config: AppConfig) -> list[FrontierRunSpec]:
                         f"{scenario.name}__te_{tracking_error_target:.{precision}f}"
                         f"__{frontier_mode}"
                     ),
-                    scenario_name=scenario_name,
+                    scenario_name=scenario.name,
                     tracking_error_target=float(tracking_error_target),
                     frontier_mode=frontier_mode,
                 )
@@ -130,7 +130,7 @@ def run_single_trial(
     )
 
     previous_weights_by_run = previous_weights_by_run or {}
-    unconstrained_inputs = build_unconstrained_inputs_for_trial(
+    unconstrained_inputs = build_optimization_inputs_for_trial(
         alpha_sample=alpha_sample,
         covariance=covariance,
         risk_aversion=config.simulation.risk_aversion,
@@ -138,7 +138,7 @@ def run_single_trial(
     )
     unconstrained_weights = solve_unconstrained_weights(unconstrained_inputs)
     
-    scenario_results: dict[str, OptimizationResults] = {}
+    scenario_results: dict[str, OptimizationResult] = {}
     scenario_diagnostics: dict[str, TrialDiagnostics] = {}
     run_specs: dict[str, FrontierRunSpec] = {}
     scenario_map = {scenario.name: scenario for scenario in config.scenarios}
